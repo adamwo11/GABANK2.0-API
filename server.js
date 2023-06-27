@@ -6,6 +6,9 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
+app.use(cors({
+  origin: 'http://localhost:3000', // Replace with your React app's domain
+}));
 const PORT = 3002;
 
 // Create a PostgreSQL pool
@@ -16,9 +19,6 @@ const pool = new Pool({
   password: 'postgres',
   port: 5432,
 });
-
-// Enable CORS
-app.use(cors());
 
 // Middleware
 app.use(express.json());
@@ -123,8 +123,6 @@ app.get('/users/me', authenticateToken, async (req, res) => {
   try {
     // Retrieve the user ID from the token
     const { userId } = req.user;
-
-    // Fetch the user information from the database based on the user ID
     const query = 'SELECT * FROM users WHERE id = $1';
     const result = await pool.query(query, [userId]);
     const user = result.rows[0];
@@ -140,7 +138,6 @@ app.get('/users/me', authenticateToken, async (req, res) => {
 app.get('/users/:userId', authenticateToken, async (req, res) => {
   try {
     const userId = req.params.userId;
-
     // Retrieve the user's data from the database based on the user ID
     const query = 'SELECT id, name, email FROM users WHERE id = $1';
     const result = await pool.query(query, [userId]);
@@ -160,7 +157,6 @@ app.get('/users/:userId', authenticateToken, async (req, res) => {
 });
 
 
-
 // // Protected route to fetch user cards
 app.get('/usercards', authenticateToken, async (req, res) => {
   try {
@@ -168,7 +164,6 @@ app.get('/usercards', authenticateToken, async (req, res) => {
     const query = 'SELECT * FROM accounts WHERE userId = $1';
     const result = await pool.query(query, [req.user.userId]);
     const cards = result.rows;
-
     // Send the user's card data as the response
     res.status(200).json({ cards });
   } catch (error) {
@@ -176,29 +171,68 @@ app.get('/usercards', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch user cards' });
   }
 });
+
+
 app.post('/usercards', authenticateToken, async (req, res) => {
   try {
     const { userId, cardType, cardPin, firstFourNumbers, balance } = req.body;
-
     // Insert the new card into the database
     const query = 'INSERT INTO accounts (userId, cardType, cardPin, firstFourNumbers, balance) VALUES ($1, $2, $3, $4, $5)';
     const values = [userId, cardType, cardPin, firstFourNumbers, balance];
     await pool.query(query, values);
-
     res.status(200).json({ message: 'Card added successfully' });
   } catch (error) {
     console.error('Error adding card:', error);
     res.status(500).json({ error: 'Failed to add card' });
   }
 });
-app.patch('/atm/:cardId/withdraw', authenticateToken, async (req, res) => {
+
+
+app.get('/atm/:id', (req, res) => {
   try {
-    const cardId = req.params.cardId;
+    const ATMId = req.params.id;
+    console.log('hello');
+    console.log(ATMId);
+    // Retrieve necessary data from the database based on the id
+    const query = 'SELECT * FROM accounts WHERE id = $1';
+    pool.query(query, [ATMId], (error, results) => {
+      if (error) {
+        console.error('Error retrieving ATM data:', error);
+        return res.status(500).json({ error: 'An error occurred while retrieving ATM data' });
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ error: 'Card not found' });
+        
+      }
+      const cardData = results.rows[0];
+      console.log('Results:', results);
+      console.log('woof')
+      console.log('CardData:', cardData);
+      // Prepare the necessary data for the ATM page
+      const atmData = {
+        ATMId: cardData.id,
+        cardType: cardData.cardtype,
+        balance: cardData.balance,
+      };
+
+      res.json(atmData);
+    });
+  } catch (error) {
+    console.error('Error occurred:', error);
+    return res.status(500).json({ error: 'An error occurred' });
+  }
+});
+
+
+
+app.patch('/atm/:id/withdraw', authenticateToken, async (req, res) => {
+  try {
+    const id = req.params.id;
     const { amount } = req.body;
 
     // Retrieve the current balance of the card from the database
     const query = 'SELECT balance FROM accounts WHERE id = $1';
-    const result = await pool.query(query, [cardId]);
+    const result = await pool.query(query, [id]);
     const currentBalance = result.rows[0].balance;
 
     // Perform the withdraw operation
@@ -206,7 +240,7 @@ app.patch('/atm/:cardId/withdraw', authenticateToken, async (req, res) => {
 
     // Update the card's balance in the database
     const updateQuery = 'UPDATE accounts SET balance = $1 WHERE id = $2';
-    await pool.query(updateQuery, [newBalance, cardId]);
+    await pool.query(updateQuery, [newBalance, id]);
 
     res.status(200).json({ message: 'Withdrawal successful' });
   } catch (error) {
@@ -214,15 +248,17 @@ app.patch('/atm/:cardId/withdraw', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Withdrawal failed' });
   }
 });
+
+
 // Deposit route
-app.patch('/atm/:cardId/deposit', authenticateToken, async (req, res) => {
+app.patch('/atm/:id/deposit', authenticateToken, async (req, res) => {
   try {
-    const cardId = req.params.cardId;
+    const id = req.params.id;
     const { amount } = req.body;
 
     // Retrieve the current balance of the card from the database
     const query = 'SELECT balance FROM accounts WHERE id = $1';
-    const result = await pool.query(query, [cardId]);
+    const result = await pool.query(query, [id]);
     const currentBalance = result.rows[0].balance;
 
     // Perform the deposit operation
@@ -230,7 +266,7 @@ app.patch('/atm/:cardId/deposit', authenticateToken, async (req, res) => {
 
     // Update the card's balance in the database
     const updateQuery = 'UPDATE accounts SET balance = $1 WHERE id = $2';
-    await pool.query(updateQuery, [newBalance, cardId]);
+    await pool.query(updateQuery, [newBalance, id]);
 
     res.status(200).json({ message: 'Deposit successful' });
   } catch (error) {
@@ -241,13 +277,13 @@ app.patch('/atm/:cardId/deposit', authenticateToken, async (req, res) => {
 
 
 // Check balance route
-app.get('/atm/:cardId/balance', authenticateToken, async (req, res) => {
+app.get('/atm/:id/balance', authenticateToken, async (req, res) => {
   try {
-    const cardId = req.params.cardId;
+    const id = req.params.id;
 
     // Retrieve the current balance of the card from the database
     const query = 'SELECT balance FROM accounts WHERE id = $1';
-    const result = await pool.query(query, [cardId]);
+    const result = await pool.query(query, [id]);
     const balance = result.rows[0].balance;
 
     res.status(200).json({ balance });
@@ -256,15 +292,7 @@ app.get('/atm/:cardId/balance', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Failed to retrieve balance' });
   }
 });
-app.get('/atm/:cardId', (req, res) => {
-  const cardId = req.params.cardId;
-  // Retrieve necessary data from the database based on the cardId
-  const atmData = {
-    cardId: cardId,
-    // Other relevant data for the ATM page
-  };
-  res.json(atmData);
-});
+
 
 if (process.env.NODE_ENV === 'production') {
   const path = require('path')
