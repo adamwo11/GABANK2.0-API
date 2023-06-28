@@ -7,7 +7,7 @@ require('dotenv').config();
 
 const app = express();
 app.use(cors({
-  origin: 'http://localhost:3000', // Replace with your React app's domain
+  origin: 'http://localhost:3000'
 }));
 const PORT = 3002;
 
@@ -224,54 +224,35 @@ app.get('/atm/:id', (req, res) => {
 });
 
 
-
-app.patch('/atm/:id/withdraw', authenticateToken, async (req, res) => {
+// Transaction route
+app.patch('/atm/:id/transaction', authenticateToken, async (req, res) => {
   try {
     const id = req.params.id;
-    const { amount } = req.body;
+    const { amount, operation } = req.body;
 
     // Retrieve the current balance of the card from the database
     const query = 'SELECT balance FROM accounts WHERE id = $1';
     const result = await pool.query(query, [id]);
     const currentBalance = result.rows[0].balance;
 
-    // Perform the withdraw operation
-    const newBalance = currentBalance - parseInt(amount);
+    // Calculate the new balance based on the operation
+    let newBalance;
+    if (operation === 'withdraw') {
+      newBalance = currentBalance - parseInt(amount);
+    } else if (operation === 'deposit') {
+      newBalance = currentBalance + parseInt(amount);
+    } else {
+      throw new Error('Invalid operation');
+    }
 
-    // Update the card's balance in the database
-    const updateQuery = 'UPDATE accounts SET balance = $1 WHERE id = $2';
-    await pool.query(updateQuery, [newBalance, id]);
+    // Update the card's balance using the PATCH method
+    const patchQuery = 'UPDATE accounts SET balance = $1 WHERE id = $2';
+    await pool.query(patchQuery, [newBalance, id]);
 
-    res.status(200).json({ message: 'Withdrawal successful' });
+    res.status(200).json({ message: `${operation.charAt(0).toUpperCase() + operation.slice(1)} successful` });
   } catch (error) {
-    console.error('Error during withdrawal:', error);
-    res.status(500).json({ error: 'Withdrawal failed' });
-  }
-});
-
-
-// Deposit route
-app.patch('/atm/:id/deposit', authenticateToken, async (req, res) => {
-  try {
-    const id = req.params.id;
-    const { amount } = req.body;
-
-    // Retrieve the current balance of the card from the database
-    const query = 'SELECT balance FROM accounts WHERE id = $1';
-    const result = await pool.query(query, [id]);
-    const currentBalance = result.rows[0].balance;
-
-    // Perform the deposit operation
-    const newBalance = currentBalance + parseInt(amount);
-
-    // Update the card's balance in the database
-    const updateQuery = 'UPDATE accounts SET balance = $1 WHERE id = $2';
-    await pool.query(updateQuery, [newBalance, id]);
-
-    res.status(200).json({ message: 'Deposit successful' });
-  } catch (error) {
-    console.error('Error during deposit:', error);
-    res.status(500).json({ error: 'Deposit failed' });
+    console.error('Error during transaction:', error);
+    res.status(500).json({ error: 'Transaction failed' });
   }
 });
 
