@@ -9,8 +9,6 @@ const atmRoute = require('./routes/atm');
 const { authenticateToken } = require('./middlewares/authenticator');
 require('dotenv').config();
 
-
-
 const app = express();
 app.use(cors({ origin: 'http://localhost:3000' }));
 const PORT = 3002;

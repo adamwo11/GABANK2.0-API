@@ -23,7 +23,7 @@ router.get('/:id', (req, res) => {
         console.error('Error retrieving ATM data:', error);
         return res.status(500).json({ error: 'An error occurred while retrieving ATM data' });
       }
-      if (results.length === 0) {
+      if (results.rows.length === 0) {
         return res.status(404).json({ error: 'Card not found' });
       }
       const cardData = results.rows[0];
@@ -45,36 +45,56 @@ router.get('/:id', (req, res) => {
   }
 });
 
-router.patch('/:id/transaction', authenticateToken, async (req, res) => {
+
+router.patch('/:id/withdraw', async (req, res) => {
   try {
     const id = req.params.id;
-    const { amount, operation } = req.body;
+    const { amount } = req.body;
 
     // Retrieve the current balance of the card from the database
     const query = 'SELECT balance FROM accounts WHERE id = $1';
     const result = await pool.query(query, [id]);
-    const currentBalance = result.rows[0].balance;
+    const currentBalance = parseFloat(result.rows[0].balance);
 
-    // Calculate the new balance based on the operation
-    let newBalance;
-    if (operation === 'withdraw') {
-      newBalance = currentBalance - parseInt(amount);
-    } else if (operation === 'deposit') {
-      newBalance = currentBalance + parseInt(amount);
-    } else {
-      throw new Error('Invalid operation');
-    }
+    // Calculate the new balance after withdrawal
+    const newBalance = currentBalance - parseFloat(amount);
 
-    // Update the card's balance using the PATCH method
-    const patchQuery = 'UPDATE accounts SET balance = $1 WHERE id = $2';
-    await pool.query(patchQuery, [newBalance, id]);
+    // Update the card's balance in the database
+    const updateQuery = 'UPDATE accounts SET balance = $1 WHERE id = $2';
+    await pool.query(updateQuery, [newBalance, id]);
 
-    res.status(200).json({ message: `${operation.charAt(0).toUpperCase() + operation.slice(1)} successful` });
+    res.json({ message: 'Withdrawal successful', newBalance });
   } catch (error) {
-    console.error('Error during transaction:', error);
-    res.status(500).json({ error: 'Transaction failed' });
+    console.error('Error during withdrawal:', error);
+    res.status(500).json({ error: 'Failed to withdraw from the card' });
   }
 });
+
+
+router.patch('/:id/deposit', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { amount } = req.body;
+
+    // Retrieve the current balance of the card from the database
+    const query = 'SELECT balance FROM accounts WHERE id = $1';
+    const result = await pool.query(query, [id]);
+    const currentBalance = parseFloat(result.rows[0].balance);
+
+    // Calculate the new balance after deposit
+    const newBalance = currentBalance + parseFloat(amount);
+
+    // Update the card's balance in the database
+    const updateQuery = 'UPDATE accounts SET balance = $1 WHERE id = $2';
+    await pool.query(updateQuery, [newBalance, id]);
+
+    res.json({ message: 'Deposit successful', newBalance });
+  } catch (error) {
+    console.error('Error during deposit:', error);
+    res.status(500).json({ error: 'Failed to deposit to the card' });
+  }
+});
+
 
 router.get('/:id/balance', authenticateToken, async (req, res) => {
   try {
