@@ -11,6 +11,15 @@ app.use(cors({
 }));
 const PORT = 3002;
 
+if (process.env.NODE_ENV === 'production') {
+  const path = require('path')
+  app.use(express.static(path.join(__dirname, 'build')));
+
+  app.get('/*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'build', 'index.html'));
+  });
+}
+
 // Create a PostgreSQL pool
 const pool = new Pool({
   user: 'adamsmac',
@@ -275,14 +284,7 @@ app.get('/atm/:id/balance', authenticateToken, async (req, res) => {
 });
 
 
-if (process.env.NODE_ENV === 'production') {
-  const path = require('path')
-  app.use(express.static(path.join(__dirname, 'build')));
 
-  app.get('/*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'build', 'index.html'));
-  });
-}
 
 
 app.listen(PORT, () => console.log(`Server is listening here: http://localhost:${PORT}`));
